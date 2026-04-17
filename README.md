@@ -64,7 +64,7 @@ Before running any script, update the relevant `config.py`:
 
 ## Running
 
-### Pipeline 1: Adapter fine-tuning
+### Pipeline 1: Adapters + Backbone Fine-tuning
 
 ```bash
 cd pipelines/adapters_plus_backbone_tuning
@@ -73,7 +73,7 @@ python train.py
 
 Trains adapters jointly with the backbone. LoRA (PEFT) can be enabled via `peft_training` in `TrainingConfig`. Outputs `test_preds.pkl` with per-layer predictions.
 
-### Pipeline 2: Embedding extraction + MLP classifiers
+### Pipeline 2: Adapter Fine-tuning
 
 ```bash
 cd pipelines/adapter_tuning

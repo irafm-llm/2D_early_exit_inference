@@ -20,17 +20,27 @@ Datasets used in the paper and experiments:
 
 ```
 2D_early_exit_inference/
-├── fine_tuning/          # Adapter fine-tuning trained jointly with the backbone (optional LoRA via PEFT)
-│   ├── config.py         # Model, dataset, training hyperparameters — update before running
-│   ├── train.py          # Fine-tuning entry point
-│   ├── model.py          # Adapter module definition
-│   └── utils.py          # Data loading and preprocessing helpers
+├── pipelines/
+│   ├── adapters_plus_backbone_tuning/   # Adapter fine-tuning trained jointly with the backbone (optional LoRA via PEFT)
+│   │   ├── config.py         # Model, dataset, training hyperparameters — update before running
+│   │   ├── train.py          # Fine-tuning entry point
+│   │   ├── model.py          # Adapter module definition
+│   │   └── utils.py          # Data loading and preprocessing helpers
+│   │
+│   ├── adapter_tuning/       # Frozen LLM hidden state extraction + per-layer MLP classifiers
+│   │   ├── extract_embeddings.py   # Extract per-sentence mean embeddings from all layers
+│   │   ├── train_classifiers.py    # Train one MLP classifier per layer on extracted embeddings
+│   │   ├── dataset_configs.py      # Dataset configurations and prompt templates
+│   │   └── model_configs.py        # Per-model classifier hyperparameters
+│   │
+│   └── layerskip_tuning/     # LayerSkip SFT training + early-exit evaluation
+│       ├── config.py         # Model, dataset, and eval hyperparameters — update before running
+│       ├── train.py          # SFT training entry point (LayerSkip-aware trainer)
+│       ├── eval.py           # Early-exit evaluation and accuracy reporting
+│       └── custom_trainer.py # LayerSkipSFTTrainer with rotating early-exit loss
 │
-└── layerskip/            # LayerSkip-based SFT + early-exit evaluation
-    ├── config.py         # Model, dataset, and eval hyperparameters — update before running
-    ├── train.py          # SFT training entry point (LayerSkip-aware trainer)
-    ├── eval.py           # Early-exit evaluation and accuracy reporting
-    └── custom_trainer.py # LayerSkipSFTTrainer with loss
+└── early_exit/               # 2D early exit algorithm (consumes output from any pipeline)
+    └── prepare_data.py       # Normalize pkl format from any pipeline into standard hierarchical format
 ```
 
 ---
@@ -39,12 +49,12 @@ Datasets used in the paper and experiments:
 
 Before running any script, update the relevant `config.py`:
 
-**`fine_tuning/config.py`**
+**`pipelines/adapters_plus_backbone_tuning/config.py`**
 - `model_ckpt` — HuggingFace model ID (e.g. `meta-llama/Llama-3.1-8B-Instruct`)
 - `dataset_name` — HuggingFace dataset ID
 - `dataset_config` — set `text_column_name`, `label_column_name`, `num_labels`, and `label_names` to match your dataset
 
-**`layerskip/config.py`**
+**`pipelines/layerskip_tuning/config.py`**
 - `model_name` / `tokenizer_name` — HuggingFace model ID
 - `dataset_name` — HuggingFace dataset ID
 - `eval_skip_layer` — controls which intermediate layer is used to make predictions during evaluation (instead of the final layer); accuracy is computed from this layer's output
@@ -54,29 +64,40 @@ Before running any script, update the relevant `config.py`:
 
 ## Running
 
-### Fine-tuning (adapter-based)
+### Pipeline 1: Adapter fine-tuning
 
 ```bash
-cd fine_tuning
+cd pipelines/adapters_plus_backbone_tuning
 python train.py
 ```
 
-Trains adapters jointly with the backbone. LoRA (PEFT) can be enabled via `peft_training` in `TrainingConfig`. Checkpoints are saved to the path defined by `TrainingConfig.output_dir` in `config.py`.
+Trains adapters jointly with the backbone. LoRA (PEFT) can be enabled via `peft_training` in `TrainingConfig`. Outputs `test_preds.pkl` with per-layer predictions.
 
-### LayerSkip SFT Training
-
-```bash
-cd layerskip
-python train.py
-```
-
-Fine-tunes the full model using `LayerSkipSFTTrainer`, which applies a combined loss from a rotating early-exit layer and the final layer at each step. The trained model is saved locally using the model and dataset name.
-
-### LayerSkip Evaluation
+### Pipeline 2: Embedding extraction + MLP classifiers
 
 ```bash
-cd layerskip
-python eval.py
+cd pipelines/adapter_tuning
+python extract_embeddings.py --config amazon_reviews --model meta-llama/Meta-Llama-3.1-8B-Instruct
+python train_classifiers.py --model llama_3_1_8b --train-dir <train_embeddings_dir> --test-dir <test_embeddings_dir> --output-dir <output_dir>
 ```
 
-Loads the fine-tuned checkpoint and runs greedy inference with early exit at `eval_skip_layer`. Reports accuracy and writes results to `metrics.txt`.
+Extracts hidden states from all layers of a frozen LLM, then trains one MLP classifier per layer. Outputs `training_results_v3.pkl` with per-layer predictions and probabilities.
+
+### Pipeline 3: LayerSkip SFT
+
+```bash
+cd pipelines/layerskip_tuning
+python train.py   # fine-tune with LayerSkip loss
+python eval.py    # evaluate with early exit at eval_skip_layer
+```
+
+Fine-tunes the model with a combined loss across a rotating early-exit layer and the final layer. Evaluation runs greedy inference with early exit and writes accuracy to `metrics.txt`.
+
+### Early Exit
+
+```bash
+cd early_exit
+python prepare_data.py --input <pipeline_output.pkl> --output normalized.pkl
+```
+
+Normalizes the pkl output from any pipeline into the standard hierarchical format expected by the 2D early exit algorithm.

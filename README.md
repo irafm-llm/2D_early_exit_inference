@@ -30,6 +30,7 @@ Datasets used in the paper and experiments:
 │   ├── adapter_tuning/       # Frozen LLM hidden state extraction + per-layer MLP classifiers
 │   │   ├── extract_embeddings.py   # Extract per-sentence mean embeddings from all layers
 │   │   ├── train_classifiers.py    # Train one MLP classifier per layer on extracted embeddings
+│   │   ├── evaluate_scheduler.py   # 2D early-exit scheduler sweep (accuracy/savings heatmap)
 │   │   ├── dataset_configs.py      # Dataset configurations and prompt templates
 │   │   └── model_configs.py        # Per-model classifier hyperparameters
 │   │
@@ -79,9 +80,10 @@ Trains adapters jointly with the backbone. LoRA (PEFT) can be enabled via `peft_
 cd pipelines/adapter_tuning
 python extract_embeddings.py --config amazon_reviews --model meta-llama/Meta-Llama-3.1-8B-Instruct
 python train_classifiers.py --model llama_3_1_8b --train-dir <train_embeddings_dir> --test-dir <test_embeddings_dir> --output-dir <output_dir>
+python evaluate_scheduler.py --input <output_dir>/training_results.pkl --output <eval_dir> --config amazon_reviews
 ```
 
-Extracts hidden states from all layers of a frozen LLM, then trains one MLP classifier per layer. Outputs `training_results_v3.pkl` with per-layer predictions and probabilities.
+Extracts hidden states from all layers of a frozen LLM, then trains one MLP classifier per layer. Outputs `training_results.pkl` with per-layer predictions and probabilities. `evaluate_scheduler.py` then sweeps a grid of (ignore, acceptance) thresholds and produces `scheduler_heatmap.{png,pdf,svg}`, `evaluation_report.txt` and `best_thresholds.txt`.
 
 ### Pipeline 3: LayerSkip SFT
 

@@ -280,13 +280,13 @@ def main():
         results[layer_idx] = examples
 
     # Save results
-    output_path = output_dir / "training_results_v3.pkl"
+    output_path = output_dir / "training_results.pkl"
     with open(output_path, 'wb') as f:
         pickle.dump(results, f)
     print(f"\n5. Results saved to: {output_path}")
 
     # Save summary
-    summary_path = output_dir / "training_summary_v3.txt"
+    summary_path = output_dir / "training_summary.txt"
     with open(summary_path, 'w') as f:
         f.write(f"Train Classifiers - {model_config['display_name']}\n")
         f.write("=" * 60 + "\n\n")

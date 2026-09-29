@@ -1,8 +1,6 @@
 # Hardware utilisation and real-world operation
 
-How the 2D early-exit method behaves when it runs on real hardware: GPU and CPU utilisation, GPU memory, repeated wall-clock timing, and single-request (batch size 1) operation. These quantities cannot be derived from batch size or from time per document, so they were measured directly during execution.
-
-Each measurement compares the method (**2D EE**) with the same backbone without early exit (**full**) and with layer-only early exit (**1D EE**).
+GPU and CPU utilisation, GPU memory, repeated timing and batch-size-1 latency of 2D early exit (**2D EE**), layer-only early exit (**1D EE**) and the same model without early exit (**full**).
 
 ## Setup
 
@@ -18,14 +16,6 @@ Each measurement compares the method (**2D EE**) with the same backbone without 
 | Timing | 1 warm-up batch, then 3 timed passes over the same documents |
 | Monitoring | NVML every 100 ms (GPU utilisation, memory), psutil (process CPU, RSS), PyTorch peak memory |
 | Date | 2026-09-29 |
-
-## Summary
-
-- **Batched:** GPU utilisation 90–98 %, CPU ≈ one core (100–102 % of a core), peak GPU memory of 2D EE 8.0–21.7 GiB (model weights 5.7 GiB).
-- **Batch 1:** GPU utilisation 45–98 %, CPU ≈ one core (100–101 % of a core), peak GPU memory of 2D EE 6.0–9.6 GiB (model weights 5.7 GiB).
-- **Timing is stable:** across 3 repeated passes the std of time per document is 0.02–7.3 % of the mean.
-- **Limitation at batch size 1 on short inputs** (MMS: 54 % GPU): a single short request does not keep the GPU busy – kernel launches from the host dominate. This holds for every mode, including full.
-- **CPU load does not grow with early exit:** the process uses about one core in every mode, the same as full.
 
 ## Measurements
 
@@ -90,7 +80,7 @@ Time per document (ms) in each timed pass.
 
 ![CPU and GPU utilisation](figures/hw_utilization.png)
 
-*GPU utilisation (NVML) and CPU usage of the process during the timed passes.*
+*Mean GPU utilisation (NVML) and mean CPU usage of the process during the timed passes.*
 
 ### GPU memory
 
@@ -102,23 +92,18 @@ Time per document (ms) in each timed pass.
 
 ![Time per document](figures/latency_ms_per_doc.png)
 
-*Wall-clock time per document; error bars = std over the timed passes (mostly too small to see).*
+*Time per document, mean ± std over the timed passes.*
 
 ### Batch size 1 latency
 
 ![Batch size 1 latency](figures/batch1_latency_distribution.png)
 
-*Batch size 1: latency of a single request (p50, p90, max), log scale.*
+*Batch size 1: per-request latency p50, p90 and max (log scale).*
 
-## How to read the numbers
+## Metrics
 
-- **GPU utilisation** (NVML) is the share of time at least one kernel runs on the GPU. 100 % means the GPU never waits for the host; it does not mean the compute units are saturated.
-- **CPU %** is the usage of the inference process; 100 % = one fully used core. The executor is a single host thread that schedules GPU kernels.
-- **GPU memory** is the peak reserved by the PyTorch allocator (weights + KV cache + activations). Early exit lowers it on long documents because fewer (layer, chunk) cells are ever held in the KV cache.
-- **Batch size 1** requests are synchronised one by one, so the latency is what a single user would see.
-
-## Methodology
-
-- Batched online executor with real model weights, real document lengths and a paged KV cache (FlashInfer); a document leaves the batch as soon as its exit rule fires, and every (layer, chunk) cell is computed once.
-- Exit decisions use the trained heads' outputs with thresholds selected on the validation split; online decisions were checked to reproduce the offline evaluation in every configuration. Token values are random, which does not affect timing (compute cost does not depend on token values).
-- Before each run the GPU was verified idle (utilisation ≤ 5 %, memory ≤ 1000 MiB, no other process). No errors occurred.
+- **GPU util** – NVML utilisation: share of time at least one kernel is running on the GPU, sampled every 100 ms.
+- **CPU** – CPU usage of the inference process (psutil); 100 % = one core.
+- **GPU memory peak** – `torch.cuda.max_memory_reserved` (weights + KV cache + activations).
+- **host RSS** – peak resident memory of the process.
+- **Batch size 1 latency** – wall-clock time of one request, synchronised per request.

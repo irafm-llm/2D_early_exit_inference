@@ -1,4 +1,5 @@
 #### [Paper (PDF)](docs/2D%20early%20exit.pdf)
+#### [Hardware utilisation and runtime performance (CPU/GPU)](docs/performance/README.md)
 
 The project introduces a two-dimensional (2D) early exit strategy that coordinates layer-wise and sentence-wise exiting for classification tasks in large language models. By processing input
 incrementally sentence-by-sentence while progressively activating deeper layers, our method achieves multiplicative computational savings that exceed those from optimizing either dimension
